@@ -7,6 +7,14 @@ use std::fs::File;
 use std::io::prelude::*;
 use syn::{parse_macro_input, Ident, LitStr};
 
+const RUST_KEYWORDS: &[&str] = &[
+    "_", "abstract", "alignof", "as", "become", "box", "break", "const", "continue", "crate", "do",
+    "else", "enum", "extern", "false", "final", "fn", "for", "if", "impl", "in", "let", "loop",
+    "macro", "match", "mod", "move", "mut", "offsetof", "override", "priv", "proc", "pub", "pure",
+    "ref", "return", "Self", "self", "sizeof", "static", "struct", "super", "trait", "true",
+    "type", "typeof", "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
+];
+
 /// Macro for parsing a CSS-file into a rust struct with fields for every css rule.
 ///
 /// Currently the crate uses a basic regex-formula to parse the CSS. This is obviously not the
@@ -63,7 +71,12 @@ pub fn css_typegen(tokens: TokenStream) -> TokenStream {
             .flatten()
             .map(|m| m.as_str())
             .map(|class| (class.to_owned(), class.replace("-", "_")))
-            .for_each(|item| classes.push(item));
+            .for_each(|(ident, mut rust_ident)| {
+                if RUST_KEYWORDS.contains(&rust_ident.as_str()) {
+                    rust_ident.insert(0, '_');
+                }
+                classes.push((ident, rust_ident));
+            });
     }
 
     classes.sort_unstable_by(|(_, a), (_, b)| a.cmp(b));
