@@ -1,7 +1,7 @@
 use css_typegen::css_typegen;
 
 // Test that the macro compiles
-css_typegen!("css/styles.css", "css/other.css", "css/last.css");
+css_typegen!("css/styles.css", "css/other.css", "css/folder");
 
 #[test]
 fn test_field() {

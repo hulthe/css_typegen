@@ -3,8 +3,9 @@ use proc_macro::{TokenStream, TokenTree};
 use proc_macro2::Span;
 use quote::quote;
 use regex::Regex;
-use std::fs::File;
-use std::io::prelude::*;
+use std::fs::{metadata, read_dir, read_to_string};
+use std::io;
+use std::path::Path;
 use syn::{parse_macro_input, Ident, LitStr};
 
 const RUST_KEYWORDS: &[&str] = &[
@@ -62,21 +63,19 @@ pub fn css_typegen(tokens: TokenStream) -> TokenStream {
         let token = tree.into();
         let path = parse_macro_input!(token as LitStr).value();
 
-        let mut file = File::open(&path).expect("Failed to open file");
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)
-            .expect("Failed to read file");
-        re.captures_iter(&contents)
-            .map(|capture| capture.name("class"))
-            .flatten()
-            .map(|m| m.as_str())
-            .map(|class| (class.to_owned(), class.replace("-", "_")))
-            .for_each(|(ident, mut rust_ident)| {
-                if RUST_KEYWORDS.contains(&rust_ident.as_str()) {
-                    rust_ident.insert(0, '_');
-                }
-                classes.push((ident, rust_ident));
-            });
+        for contents in read_file_or_dir(&path).expect("io-error") {
+            re.captures_iter(&contents)
+                .map(|capture| capture.name("class"))
+                .flatten()
+                .map(|m| m.as_str())
+                .map(|class| (class.to_owned(), class.replace("-", "_")))
+                .for_each(|(ident, mut rust_ident)| {
+                    if RUST_KEYWORDS.contains(&rust_ident.as_str()) {
+                        rust_ident.insert(0, '_');
+                    }
+                    classes.push((ident, rust_ident));
+                });
+        }
     }
 
     classes.sort_unstable_by(|(_, a), (_, b)| a.cmp(b));
@@ -103,4 +102,17 @@ pub fn css_typegen(tokens: TokenStream) -> TokenStream {
     };
 
     css.into()
+}
+
+fn read_file_or_dir<P: AsRef<Path>>(path: P) -> io::Result<Vec<String>> {
+    let metadata = metadata(&path)?;
+    if metadata.is_file() {
+        Ok(vec![read_to_string(path)?])
+    } else {
+        let mut output = vec![];
+        for entry in read_dir(path)? {
+            output.extend(read_file_or_dir(entry?.path())?);
+        }
+        Ok(output)
+    }
 }
